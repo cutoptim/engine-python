@@ -1,0 +1,32 @@
+# CI for the mirror repo cutoptim/engine-python (published from the CutOptim monorepo, sdks/python).
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ['3.9', '3.11', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install --upgrade pip build
+      - run: python -m build
+      - run: pip install dist/*.whl
+      - name: Import + webhook signature vector
+        run: |
+          python - <<'PY'
+          import json, cutoptim
+          from cutoptim import verify_webhook
+          v = json.load(open("tests/webhook-vector.json"))
+          assert verify_webhook(v["body"], v["header"], v["secret"], now_s=v["t"])
+          assert not verify_webhook(v["body"] + " ", v["header"], v["secret"], now_s=v["t"])
+          print("cutoptim", cutoptim.__version__, "webhook vector ok")
+          PY

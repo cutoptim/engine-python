@@ -9,5 +9,5 @@ Standard library only (urllib, hmac). Types are generated from the OpenAPI docum
 from .client import CutOptim, CutOptimError, is_job_accepted
 from .webhooks import verify_webhook, SIGNATURE_HEADER
 
-__version__ = "1.1.0"
+__version__ = "1.3.0"
 __all__ = ["CutOptim", "CutOptimError", "is_job_accepted", "verify_webhook", "SIGNATURE_HEADER", "__version__"]

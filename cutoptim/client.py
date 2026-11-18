@@ -50,13 +50,13 @@ class CutOptim:
     # ── optimize (metered) ──
     def optimize_2d(self, request: t.Optimize2DRequest, idempotency_key: Optional[str] = None) -> Dict[str, Any]:
         """2D panels. engine "max" returns the 202 job (see wait_for_job)."""
-        return self._call("POST", "/v1/optimize/2d", request, idempotency_key, idempotent=True)
+        return self._optimize_sync("/v1/optimize/2d", request, idempotency_key)
 
     def optimize_1d(self, request: t.Optimize1DRequest, idempotency_key: Optional[str] = None) -> t.Optimize1DResponse:
-        return self._call("POST", "/v1/optimize/1d", request, idempotency_key, idempotent=True)
+        return self._optimize_sync("/v1/optimize/1d", request, idempotency_key)
 
     def optimize_wood(self, request: t.OptimizeWoodRequest, idempotency_key: Optional[str] = None) -> t.OptimizeWoodResponse:
-        return self._call("POST", "/v1/optimize/wood", request, idempotency_key, idempotent=True)
+        return self._optimize_sync("/v1/optimize/wood", request, idempotency_key)
 
     def optimize_nest(self, request: t.OptimizeNestRequest, idempotency_key: Optional[str] = None) -> Dict[str, Any]:
         """True-shape nesting. engine "max" returns the 202 job."""
@@ -99,6 +99,19 @@ class CutOptim:
                 raise CutOptimError(0, "timeout", "job %s is still %s after the wait timeout" % (job_id, job.get("status")))
             time.sleep(wait)
             wait = min(wait * 1.5, 10.0)
+
+    def _optimize_sync(self, path: str, request: Any, idempotency_key: Optional[str]) -> Any:
+        """2D / 1D / wood: asks for "async": "auto" (unless the request sets it) and, when the job was handed off
+        (202, status "running"), waits for it and returns its plan — the value a 200 carries. A failed hand-off
+        raises CutOptimError with code "job_failed". engine "max" still returns its 202 job."""
+        body = request if (not isinstance(request, dict) or "async" in request) else dict(request, **{"async": "auto"})
+        r = self._call("POST", path, body, idempotency_key, idempotent=True)
+        if isinstance(r, dict) and isinstance(r.get("jobId"), str) and r.get("status") == "running":
+            job = self.wait_for_job(r["jobId"])
+            if job.get("status") == "succeeded":
+                return job.get("result")
+            raise CutOptimError(0, "job_failed", job.get("error") or ("job %s failed" % r["jobId"]), {"jobId": r["jobId"]})
+        return r
 
     # ── transport ──
     def _call(self, method: str, path: str, body: Any = None, idempotency_key: Optional[str] = None, idempotent: bool = False) -> Any:
